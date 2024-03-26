@@ -1,17 +1,31 @@
-// Package scheduler is a cron replacement based on:
-//  http://adam.herokuapp.com/past/2010/4/13/rethinking_cron/
-// and
-//  https://github.com/dbader/schedule
-//
-// Uses include:
+// Package scheduler is based on:
+//  https://github.com/carlescere/scheduler.git
+// Compare to the forked version from, this version support both:
+//	1. Call the function without parameters and
+//	2. Pass the parameters to the function
+// Use Example:
 //  func main() {
-//    job := func() {
-//	fmt.Println("Time's up!")
-//    }
-//    scheduler.Every(5).Seconds().Run(function)
-//    scheduler.Every().Day().Run(function)
-//    scheduler.Every().Sunday().At("08:30").Run(function)
-//  }
+// 		job1 := func() {
+// 			t := time.Now()
+// 			fmt.Println("Time's up! @", t.UTC())
+// 		}
+// 		job2 := func(params ...interface{}) {
+// 			t := time.Now()
+// 			fmt.Println("Time's up! @", t.UTC(), params)
+// 		}
+// 		// Assuming `Every` function and the chainable methods have been updated accordingly.
+// 		// Run every 2 seconds but not now.
+// 		scheduler.Every(2).Seconds().NotImmediately().Run(job1, 1, "job1")
+// 		scheduler.Every(1).Seconds().Run(job2)
+
+// 		// Run now and every X.
+// 		scheduler.Every(5).Minutes().Run(job1, 3)
+// 		scheduler.Every().Day().Run(job1, 4)
+// 		scheduler.Every().Monday().At("08:30").Run(job2, 5)
+// 		// Keep the program from not exiting.
+// 		runtime.Goexit()
+// 	}
+
 package scheduler
 
 import (
@@ -28,7 +42,8 @@ type scheduled interface {
 
 // Job defines a running job and allows to stop a scheduled job or run it.
 type Job struct {
-	fn        func()
+	fn        interface{}
+	params    []interface{}
 	Quit      chan bool
 	SkipWait  chan bool
 	err       error
@@ -157,7 +172,7 @@ func (j *Job) At(hourTime string) *Job {
 
 // Run sets the job to the schedule and returns the pointer to the job so it may be
 // stopped or executed without waiting or an error.
-func (j *Job) Run(f func()) (*Job, error) {
+func (j *Job) Run(f interface{}, params ...interface{}) (*Job, error) {
 	if j.err != nil {
 		return nil, j.err
 	}
@@ -166,6 +181,8 @@ func (j *Job) Run(f func()) (*Job, error) {
 	j.Quit = make(chan bool, 1)
 	j.SkipWait = make(chan bool, 1)
 	j.fn = f
+	j.params = params // Store the parameters to be passed to the function
+
 	// Check for possible errors in scheduling
 	next, err = j.schedule.nextRun()
 	if err != nil {
@@ -177,9 +194,9 @@ func (j *Job) Run(f func()) (*Job, error) {
 			case <-j.Quit:
 				return
 			case <-j.SkipWait:
-				go runJob(j)
+				go j.runJob()
 			case <-time.After(next):
-				go runJob(j)
+				go j.runJob()
 			}
 			next, _ = j.schedule.nextRun()
 		}
@@ -194,13 +211,21 @@ func (j *Job) setRunning(running bool) {
 	j.isRunning = running
 }
 
-func runJob(job *Job) {
-	if job.IsRunning() {
+// runJob runs the job's function with the stored parameters.
+func (j *Job) runJob() {
+	if j.IsRunning() {
 		return
 	}
-	job.setRunning(true)
-	job.fn()
-	job.setRunning(false)
+	j.setRunning(true)
+	switch fn := j.fn.(type) {
+	case func():
+		fn() // Call the function without parameters
+	case func(...interface{}):
+		fn(j.params...) // Pass the parameters to the function
+	default:
+		j.err = errors.New("Unsupported function type")
+	}
+	j.setRunning(false)
 }
 
 func parseTime(str string) (hour, min, sec int, err error) {

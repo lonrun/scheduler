@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -335,4 +336,60 @@ func TestBadRecurrent(t *testing.T) {
 	job, err := Every(units).Seconds().Run(test)
 	assert.Nil(t, job)
 	assert.NotNil(t, err)
+}
+
+func TestScheduleFuncWithoutParams(t *testing.T) {
+	var called int32
+	fn := func() {
+		atomic.AddInt32(&called, 1)
+	}
+
+	// Create a job that runs the function
+	job, err := Every(1).Seconds().Run(fn)
+	assert.NoError(t, err)
+	assert.NotNil(t, job)
+
+	// Allow some time for the function to be called
+	time.Sleep(2 * time.Second)
+
+	// The function should have been called 2 times
+	assert.Equal(t, int32(2), atomic.LoadInt32(&called))
+
+	// Stop the job to clean up
+	job.Quit <- true
+}
+
+func TestScheduleFuncWithParams(t *testing.T) {
+	var called int32
+	// Use a channel to capture the parameters passed to the function.
+	paramsChan := make(chan []interface{}, 1)
+
+	fn := func(params ...interface{}) {
+		atomic.AddInt32(&called, 1)
+		paramsChan <- params // Send the parameters to the channel.
+	}
+
+	// Create a job that runs the function with parameters
+	job, err := Every(1).Seconds().Run(fn, "param1", 42)
+	assert.NoError(t, err)
+	assert.NotNil(t, job)
+
+	// Allow some time for the function to be called
+	time.Sleep(2 * time.Second)
+
+	// The function should have been called at least once (we expect exactly 2 calls)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&called))
+
+	// Assert that the parameters are as expected.
+	select {
+	case params := <-paramsChan:
+		assert.Equal(t, "param1", params[0])
+		assert.Equal(t, 42, params[1])
+	case <-time.After(time.Second):
+		t.Fatal("Did not receive parameters from the job function")
+	}
+
+	// Stop the job to clean up
+	job.Quit <- true
+	close(paramsChan)
 }
