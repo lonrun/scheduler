@@ -1,13 +1,12 @@
 # Scheduler
 
 [![GoDoc](https://godoc.org/github.com/lonrun/scheduler?status.svg)](https://godoc.org/github.com/lonrun/scheduler)
-[![Build Status](https://travis-ci.org/lonrun/scheduler.svg?branch=master)](https://travis-ci.org/lonrun/scheduler)
-[![Coverage Status](https://coveralls.io/repos/lonrun/scheduler/badge.svg?branch=master)](https://coveralls.io/r/lonrun/scheduler?branch=master)
+[![Build & Coverage Status](https://github.com/lonrun/scheduler/actions/workflows/go.yml/badge.svg)](https://github.com/lonrun/scheduler/actions/workflows/go.yml)
 
 Job scheduling made simple. The Scheduler package provides a fluent syntax for scheduling recurrent jobs. It's inspired by and based on **[schedule](https://github.com/carlescere/scheduler)**.
 
 ## Getting Started
-lonrun
+
 To use Scheduler, import the package and start scheduling jobs:
 
 ```go
